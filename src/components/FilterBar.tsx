@@ -5,7 +5,6 @@ import {
   List,
   Kanban,
   Box,
-  Layers,
   Printer,
 } from 'lucide-react';
 import { ReplenishFilterState } from '../types/replenishment';
@@ -83,23 +82,6 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               <option value="completed">今日已上架</option>
             </select>
           </div>
-
-          {/* Same-Rack Toggle */}
-          <button
-            onClick={() => onFilterChange({ sameRackOnly: !filter.sameRackOnly })}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
-              filter.sameRackOnly
-                ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-            }`}
-            title="仅筛选同货架二层/三层备货位垂直补货任务"
-          >
-            <Layers className="w-3.5 h-3.5 text-emerald-600" />
-            <span>仅看同架垂直源位</span>
-            {filter.sameRackOnly && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            )}
-          </button>
         </div>
 
         {/* Right: Search & View Switcher */}

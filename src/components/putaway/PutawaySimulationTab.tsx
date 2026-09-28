@@ -7,13 +7,10 @@ import {
   Layers,
   ArrowRight,
   Boxes,
-  FileSpreadsheet,
   Send,
-  Zap,
   Tag,
   Flame,
   Archive,
-  ShieldCheck,
   PackagePlus,
   Compass,
   Check,
@@ -75,88 +72,17 @@ export const PutawaySimulationTab: React.FC<PutawaySimulationTabProps> = ({
   const activePair =
     allResults.find((p) => p.item.id === selectedSkuId) || allResults[0];
 
-  const handleExportCsv = () => {
-    const headers = [
-      '判定类型',
-      'SKU编码',
-      '商品名称',
-      '品类',
-      '到货批次',
-      '到货数量',
-      '是否整托',
-      '是否免验直决',
-      '动销天数(30d)',
-      '30天均销(已剔除大促)',
-      '品类系数',
-      '一层库存阈值',
-      '一层当前可用库存',
-      '推荐储位编码',
-      '储位类型',
-      '是否同架垂直',
-      '上架策略摘要',
-    ];
-
-    const rows = allResults.map(({ item, result }) => [
-      result.skuType,
-      item.skuCode,
-      `"${item.skuName.replace(/"/g, '""')}"`,
-      item.category,
-      item.inboundBatchNo,
-      item.inboundQty,
-      item.isFullPallet ? '是 (整托)' : '否 (散箱)',
-      result.isDirectDecision ? '是 (免验直决)' : '否 (老品已校验库存)',
-      item.activeDays30d,
-      result.adjusted30dAvgDailySales,
-      result.categoryThresholdCoeff,
-      result.pickStockThreshold,
-      item.currentPickStock,
-      result.recommendedLocationCode,
-      result.recommendedTargetType,
-      result.isSameRackVertical ? '是 (同架)' : '否',
-      `"${result.strategySummary.replace(/"/g, '""')}"`,
-    ]);
-
-    const csvContent =
-      '\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute(
-      'download',
-      `入库上架推荐试算清单_${new Date().toISOString().slice(0, 10)}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    onShowToast('已成功导出所有待上架 SKU 试算与储位推荐结果清单 (CSV)', 'success');
-  };
-
   return (
     <div className="space-y-6">
       {/* Top Action & Stat Bar */}
       <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-            <span>入库上架策略实时试算与推导工作台</span>
-            <span className="text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono font-semibold">
-              SIMULATION BENCH
-            </span>
+            <span>自动上架策略引擎：计算 & 业务规则</span>
           </h3>
-          <p className="text-xs text-slate-500 mt-0.5">
-            输入或选择到货 SKU，实时运行【新品 &rarr; 爆品 &rarr; 老品 &rarr; 滞销品】判定流水线，剖析决策依据
-          </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleExportCsv}
-            className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3.5 py-2 rounded-xl border border-slate-300 transition-colors cursor-pointer"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            <span>导出全库试算清单</span>
-          </button>
           <button
             onClick={() => {
               if (activePair) {
@@ -284,9 +210,6 @@ export const PutawaySimulationTab: React.FC<PutawaySimulationTabProps> = ({
                           ? '💤 滞销直决'
                           : '📦 老品校验'}
                       </span>
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        到货: {item.inboundQty} {item.unit}
-                      </span>
                     </div>
 
                     <div className="font-semibold text-slate-800 line-clamp-1">
@@ -341,34 +264,10 @@ export const PutawaySimulationTab: React.FC<PutawaySimulationTabProps> = ({
                       <span>编码: <strong className="font-mono text-slate-700">{activePair.item.skuCode}</strong></span>
                       <span>品类: <strong className="text-slate-700">{activePair.item.category}</strong></span>
                       <span>规格: <strong className="text-slate-700">{activePair.item.specification}</strong></span>
-                      <span>本次到货: <strong className="font-mono text-blue-700">{activePair.item.inboundQty} {activePair.item.unit}</strong></span>
                       {activePair.item.isFullPallet && (
                         <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">
                           整托大件
                         </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 直决机制徽章 */}
-                  <div className="text-right">
-                    <div
-                      className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border ${
-                        activePair.result.isDirectDecision
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                          : 'bg-blue-50 text-blue-800 border-blue-300'
-                      }`}
-                    >
-                      {activePair.result.isDirectDecision ? (
-                        <>
-                          <Zap className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>免验直决 (不校验拣货区库存)</span>
-                        </>
-                      ) : (
-                        <>
-                          <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                          <span>老品库存校验机制 (已核对)</span>
-                        </>
                       )}
                     </div>
                   </div>
@@ -377,9 +276,6 @@ export const PutawaySimulationTab: React.FC<PutawaySimulationTabProps> = ({
                 {/* 推荐储位决策卡 */}
                 <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div className="space-y-1">
-                    <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider block">
-                      RECOMMENDED PUTAWAY LOCATION
-                    </span>
                     <div className="text-xl font-black font-mono tracking-tight text-white flex items-center gap-2">
                       <span>{activePair.result.recommendedLocationCode}</span>
                       {activePair.result.isSameRackVertical && (
@@ -401,8 +297,7 @@ export const PutawaySimulationTab: React.FC<PutawaySimulationTabProps> = ({
                   </div>
 
                   <div className="text-xs sm:text-right bg-white/10 p-3 rounded-xl border border-white/10">
-                    <div className="text-slate-400 text-[10px]">一句话上架指令</div>
-                    <div className="font-semibold text-slate-100 mt-0.5">
+                    <div className="font-semibold text-slate-100">
                       {activePair.result.strategySummary}
                     </div>
                   </div>
@@ -475,9 +370,6 @@ export const PutawaySimulationTab: React.FC<PutawaySimulationTabProps> = ({
                       上架决策推导全过程分析 (Decision Trace)
                     </h4>
                   </div>
-                  <span className="text-[11px] text-slate-400">
-                    严格串行执行：新品 &rarr; 爆品 &rarr; 滞销品 &rarr; 老品
-                  </span>
                 </div>
 
                 <div className="space-y-3">

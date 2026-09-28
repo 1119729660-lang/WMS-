@@ -80,38 +80,8 @@ export const RuleConfigModal: React.FC<RuleConfigModalProps> = ({
 
         {/* Form Body */}
         <div className="p-6 space-y-5 text-xs">
-          {/* 1. 补货系数 */}
+          {/* 1. 目标支撑拣选天数区间 */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="font-bold text-slate-800 flex items-center gap-1.5">
-                <span>全局默认补货系数 (Coefficient)</span>
-                <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-mono">
-                  当前: {coeff}x
-                </span>
-              </label>
-              <span className="text-[11px] text-slate-500 font-mono">默认 1.0</span>
-            </div>
-            <p className="text-slate-500 text-[11px]">
-              补货量 = 近 7 日平均销量 × 补货系数，向上取整。建议取值 0.8 ~ 1.5。
-            </p>
-            <div className="flex items-center gap-3 pt-1">
-              <input
-                type="range"
-                min="0.5"
-                max="2.5"
-                step="0.1"
-                value={coeff}
-                onChange={(e) => setCoeff(parseFloat(e.target.value))}
-                className="flex-1 accent-blue-600 cursor-pointer"
-              />
-              <span className="font-mono font-bold text-sm text-slate-800 w-12 text-center bg-slate-100 py-1 rounded">
-                {coeff}x
-              </span>
-            </div>
-          </div>
-
-          {/* 2. 目标支撑拣选天数区间 */}
-          <div className="space-y-1.5 pt-3 border-t border-slate-100">
             <label className="font-bold text-slate-800 block">
               目标补足一层拣货位支撑天数区间
             </label>

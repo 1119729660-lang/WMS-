@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   Layers,
   Sparkles,
-  Sliders,
 } from 'lucide-react';
 import { PriorityLevel, ReplenishItem } from '../types/replenishment';
 
@@ -204,22 +203,6 @@ export const Phase1ExportModal: React.FC<Phase1ExportModalProps> = ({
             >
               清空
             </button>
-          </div>
-
-          {/* Quick Coefficient Adjust */}
-          <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200">
-            <Sliders className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-slate-500">试点补货系数:</span>
-            <select
-              value={globalCoeff}
-              onChange={(e) => setGlobalCoeff(parseFloat(e.target.value))}
-              className="font-bold text-blue-600 bg-transparent focus:outline-none cursor-pointer"
-            >
-              <option value="0.8">0.8x (轻度调拨)</option>
-              <option value="1.0">1.0x (标准均销)</option>
-              <option value="1.2">1.2x (冗余备足)</option>
-              <option value="1.5">1.5x (大促预防)</option>
-            </select>
           </div>
         </div>
 

@@ -278,40 +278,23 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-slate-100 border-t border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-500">微调该SKU补货系数:</span>
-            <select
-              value={item.config.replenishCoefficient}
-              onChange={(e) => onUpdateCoeff(item.id, parseFloat(e.target.value))}
-              className="bg-white border border-slate-300 rounded px-2 py-1 font-bold text-blue-600 cursor-pointer text-xs"
-            >
-              <option value="0.8">0.8x</option>
-              <option value="1.0">1.0x (默认)</option>
-              <option value="1.2">1.2x</option>
-              <option value="1.5">1.5x</option>
-              <option value="2.0">2.0x</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800 font-medium cursor-pointer"
-            >
-              关闭
-            </button>
-            <button
-              onClick={() => {
-                onManualDispatch([item.id]);
-                onClose();
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>立即下发此补货任务</span>
-            </button>
-          </div>
+        <div className="p-4 bg-slate-100 border-t border-slate-200 flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800 font-medium cursor-pointer"
+          >
+            关闭
+          </button>
+          <button
+            onClick={() => {
+              onManualDispatch([item.id]);
+              onClose();
+            }}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>立即下发此补货任务</span>
+          </button>
         </div>
       </div>
     </div>

@@ -2,7 +2,6 @@ import React from 'react';
 import {
   Layers,
   SlidersHorizontal,
-  RefreshCw,
   Zap,
   Boxes,
   AlertTriangle,
@@ -112,9 +111,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Timer className="w-3.5 h-3.5 text-emerald-400" />
               <span>SLA 时效履约</span>
-              <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1 py-0.2 rounded font-bold border border-emerald-500/30">
-                4节点
-              </span>
             </button>
 
             <button
@@ -130,18 +126,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectMenu('putaway')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                currentMenu === 'putaway'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/60'
-              }`}
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span>上架策略配置</span>
-            </button>
-
-            <button
               onClick={() => onSelectMenu('location')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 currentMenu === 'location'
@@ -151,9 +135,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Boxes className="w-3.5 h-3.5 text-emerald-400" />
               <span>库位管理</span>
-              <span className="text-[9px] bg-indigo-500/30 text-indigo-300 px-1.5 py-0.2 rounded font-mono">
-                PRO
-              </span>
             </button>
 
             <button
@@ -167,6 +148,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
               <span>缺货预警</span>
               <span className="w-2 h-2 rounded-full bg-red-400 inline-block animate-pulse"></span>
+            </button>
+
+            <button
+              onClick={() => onSelectMenu('putaway')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                currentMenu === 'putaway'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/60'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>上架策略配置</span>
             </button>
           </nav>
         </div>
@@ -222,14 +215,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <ClipboardList className="w-4 h-4" />
             </button>
             <button
-              onClick={() => onSelectMenu('putaway')}
-              className={`p-1 rounded ${
-                currentMenu === 'putaway' ? 'bg-blue-600 text-white' : 'text-slate-400'
-              }`}
-            >
-              <Zap className="w-4 h-4" />
-            </button>
-            <button
               onClick={() => onSelectMenu('location')}
               className={`p-1 rounded ${
                 currentMenu === 'location' ? 'bg-blue-600 text-white' : 'text-slate-400'
@@ -245,16 +230,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <AlertTriangle className="w-4 h-4" />
             </button>
+            <button
+              onClick={() => onSelectMenu('putaway')}
+              className={`p-1 rounded ${
+                currentMenu === 'putaway' ? 'bg-blue-600 text-white' : 'text-slate-400'
+              }`}
+            >
+              <Zap className="w-4 h-4" />
+            </button>
           </div>
-
-          {/* Refresh */}
-          <button
-            onClick={onRefreshData}
-            className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg border border-slate-700 transition-colors cursor-pointer"
-            title="刷新系统数据"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
         </div>
       </div>
     </header>
