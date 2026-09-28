@@ -1,0 +1,6 @@
+{
+  "name": "WMS 智能拣货区动态补货管理系统",
+  "description": "面向现代仓储的拣货位动态补货监控与调度系统，支持7日动销阈值触发、P0/P1/P2多维优先级分级、二三层同架垂直备货推荐、一期人工清单圈选与二期自动化下发双模式调度看板。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
