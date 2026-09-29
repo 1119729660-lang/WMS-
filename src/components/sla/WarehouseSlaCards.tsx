@@ -64,21 +64,14 @@ export const WarehouseSlaCards: React.FC<WarehouseSlaCardsProps> = ({
             <div
               key={wh.warehouseId}
               onClick={() => onToggleSelectWarehouse(wh.warehouseId)}
-              className={`relative rounded-2xl p-4 transition-all duration-200 cursor-pointer select-none border ${
+              className={`rounded-2xl p-4 transition-all duration-200 cursor-pointer select-none border ${
                 isSelected
                   ? 'bg-blue-50/40 border-blue-500 ring-2 ring-blue-500 shadow-md transform -translate-y-0.5'
                   : 'bg-white border-slate-200/80 hover:border-slate-300 hover:shadow-xs'
               }`}
             >
-              {/* Selected Badge */}
-              {isSelected && (
-                <div className="absolute top-2.5 right-3 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs flex items-center gap-1">
-                  <span>聚焦中</span>
-                </div>
-              )}
-
               {/* Top Row: Warehouse Code & Name */}
-              <div className="pr-12">
+              <div>
                 <div className="flex items-center gap-1.5">
                   <span className="font-mono font-bold text-xs px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded border border-slate-200">
                     {wh.warehouseCode}
@@ -172,18 +165,6 @@ export const WarehouseSlaCards: React.FC<WarehouseSlaCardsProps> = ({
                     固定4节点覆盖
                   </div>
                 </div>
-              </div>
-
-              {/* Bottom hint */}
-              <div className="mt-2.5 text-[10px] text-slate-400 flex items-center justify-between">
-                <span>
-                  {config.calculationMode === 'arithmetic_mean'
-                    ? '4节点算术均值'
-                    : '订单量加权均值'}
-                </span>
-                <span className="text-blue-600 font-medium">
-                  {isSelected ? '点击取消聚焦' : '点击聚焦钻取 →'}
-                </span>
               </div>
             </div>
           );

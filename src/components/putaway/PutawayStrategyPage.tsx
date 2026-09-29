@@ -90,6 +90,63 @@ export const PutawayStrategyPage: React.FC<PutawayStrategyPageProps> = ({
         </div>
       )}
 
+      {/* Strategy Engine Navigation Switcher */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => setActiveTab('SIMULATION')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'SIMULATION'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Boxes className="w-4 h-4" />
+            <span>自动上架策略引擎 (计算 & 推导)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('CONFIG')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'CONFIG'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+            <span>上架类型规则配置 (新品/爆品/老品/滞销品)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('LOCATIONS')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'LOCATIONS'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>库位动态标签管理</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('PDA')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'PDA'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Smartphone className="w-4 h-4" />
+            <span>PDA 终端作业模拟</span>
+          </button>
+        </div>
+
+        <div className="text-xs text-slate-400 px-2 font-mono hidden md:block">
+          当前仓库: {warehouseName || '华东一号中心仓'}
+        </div>
+      </div>
+
       {/* Main Tab Views */}
       <div>
         {activeTab === 'SIMULATION' && (
@@ -99,12 +156,15 @@ export const PutawayStrategyPage: React.FC<PutawayStrategyPageProps> = ({
             locations={locations}
             onSelectSkuForPda={handleSelectSkuForPda}
             onShowToast={showToast}
+            onOpenConfig={() => setActiveTab('CONFIG')}
           />
         )}
 
         {activeTab === 'CONFIG' && (
           <PutawayRuleConfigTab
             config={config}
+            locations={locations}
+            candidates={candidates}
             onUpdateConfig={(newCfg) => setConfig(newCfg)}
             onShowToast={showToast}
           />

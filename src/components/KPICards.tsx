@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   TrendingUp,
   Boxes,
-  Compass,
 } from 'lucide-react';
 import { ReplenishSummaryMetrics } from '../types/replenishment';
 
@@ -22,7 +21,7 @@ export const KPICards: React.FC<KPICardsProps> = ({
   onSelectPriority,
 }) => {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
       {/* 1. 待补货触发 SKU */}
       <div
         onClick={() => onSelectPriority('ALL')}
@@ -122,23 +121,7 @@ export const KPICards: React.FC<KPICardsProps> = ({
         </div>
       </div>
 
-      {/* 5. 同架垂直补货命中率 */}
-      <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm">
-        <div className="flex items-center justify-between text-slate-500 mb-1">
-          <span className="text-xs font-semibold text-emerald-800">同架垂直命中率</span>
-          <Compass className="w-4 h-4 text-emerald-600" />
-        </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-2xl font-bold text-emerald-600 font-mono">
-            {metrics.sameRackHitRate}%
-          </span>
-        </div>
-        <div className="mt-1 text-[11px] text-emerald-700 font-medium truncate">
-          🎯 二层同位理货高效达标
-        </div>
-      </div>
-
-      {/* 6. 今日补货完成进度 */}
+      {/* 5. 今日补货完成进度 */}
       <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm">
         <div className="flex items-center justify-between text-slate-500 mb-1">
           <span className="text-xs font-semibold text-slate-700">今日完成/总量</span>

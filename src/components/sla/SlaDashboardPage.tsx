@@ -4,7 +4,6 @@ import {
   Activity,
   CheckCircle2,
   AlertCircle,
-  Settings,
   Sparkles,
   Info,
 } from 'lucide-react';
@@ -129,35 +128,14 @@ export const SlaDashboardPage: React.FC = () => {
       )}
 
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200/80">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-            <Activity className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900">
-                SLA 时效履约看板
-              </h2>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                4 核心节点闭环监测
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              全流程端到端时效管控：入库注册 (≤1h) → 出库注册 (≤10min) → 入库上架 (≤24h) → 出库准备 (≤24h)
-            </p>
-          </div>
+      <div className="flex items-center gap-3 pb-2 border-b border-slate-200/80">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+          <Activity className="w-5 h-5" />
         </div>
-
-        {/* Top actions */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setViewMode('config_page')}
-            className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-          >
-            <Settings className="w-4 h-4 text-blue-600" />
-            <span>独立配置中心</span>
-          </button>
+        <div>
+          <h2 className="text-lg sm:text-xl font-bold text-slate-900">
+            SLA 时效履约看板
+          </h2>
         </div>
       </div>
 

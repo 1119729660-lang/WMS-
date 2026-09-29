@@ -203,11 +203,30 @@ export function evaluatePutawayStrategy(
   const salesResult = calculate30dDailySales(sku, config);
   const catConfig = config.categoryConfigs[sku.category] || {
     category: sku.category,
-    thresholdCoeff: 1.0,
+    thresholdCoeff: config.regularProductRule.defaultSafetyStockCoeff || 1.0,
     maxPickCapacity: 200,
   };
   const categoryThresholdCoeff = catConfig.thresholdCoeff;
-  const pickStockThreshold = Math.round(salesResult.adjustedAvg * categoryThresholdCoeff * 10) / 10;
+
+  // 计算近 7 天日均销与加权均销 (备老品规则配置使用)
+  const last7DaysHistory = sku.daily30dHistory.slice(-7);
+  const sales7dSum = last7DaysHistory.reduce((acc, d) => acc + d.quantity, 0);
+  const sales7dAvg = Math.round((sales7dSum / Math.max(1, last7DaysHistory.length)) * 10) / 10;
+  const weightedAvg = Math.round((sales7dAvg * 0.6 + salesResult.adjustedAvg * 0.4) * 10) / 10;
+
+  // 根据老品规则配置选择日均动销基准
+  let baselineDailySales = salesResult.adjustedAvg;
+  let baselineLabel = '近30天日均销量';
+  if (config.regularProductRule.baselineSalesPeriod === '7D_AVG') {
+    baselineDailySales = sales7dAvg;
+    baselineLabel = '近7天日均销量';
+  } else if (config.regularProductRule.baselineSalesPeriod === 'WEIGHTED_7_30') {
+    baselineDailySales = weightedAvg;
+    baselineLabel = '7日加权综合均销 (7日*0.6 + 30日*0.4)';
+  }
+
+  const pickStockThreshold =
+    Math.round(baselineDailySales * categoryThresholdCoeff * 10) / 10;
 
   let determinedType: PutawaySKUType | null = null;
   let isDirectDecision = false;
@@ -218,144 +237,248 @@ export function evaluatePutawayStrategy(
   let strategySummary = '';
   let pdaAlertMessage = '';
 
-  // ==========================================
-  // 第一步判定：【新品判定】
-  // 系统无历史入库记录的 SKU -> 直决一层拣货区，保证快速可售
-  // 不校验拣货区库存！
-  // ==========================================
-  const isNewProduct = !sku.hasHistoryInbound;
-  trace.push({
-    stepName: '优先级1: 新品判定 (NEW)',
-    condition: '系统无历史入库记录 (hasHistoryInbound === false)',
-    result: isNewProduct,
-    description: isNewProduct
-      ? `检测到该 SKU [${sku.skuCode}] 首次入库，无历史收货/出库记录，命中新品直决规则！`
-      : `已有历史入库记录 (首次入库: ${sku.firstInboundDate || '正常在售'})，非新品，进入下一步。`,
-    badgeColor: isNewProduct ? 'emerald' : 'slate',
-  });
+  const sequence = config.prioritySequence || ['NEW', 'HOT', 'SLOW', 'REGULAR'];
 
-  if (isNewProduct && config.newProductRule.enabled) {
-    determinedType = 'NEW';
-    isDirectDecision = true;
-    checkedPickStock = false; // 不校验库存
-    priorityStep = 'STEP_1_NEW_PRODUCT';
-    targetType = 'PICK_LEVEL_1';
-    palletStrategy = 'DIRECT_PICK';
-    strategySummary = '【新品直决】直上 1 层拣货区，免验拣货库存，保障快速上架即时可售！';
-    pdaAlertMessage = '【PDA上架提示 - 新品直通】新品首次入库，请直接上架一层拣货位，无需校验拣货区存量！';
-  }
+  for (let i = 0; i < sequence.length; i++) {
+    if (determinedType) break;
+    const currentStepType = sequence[i];
+    const stepNumber = i + 1;
 
-  // ==========================================
-  // 第二步判定：【爆品判定】
-  // 近 30 天动销天数 >= 20天，或出库量 TOP 约 20% A类爆品
-  // 直决：足量铺一层拣货位，相邻地堆整托囤货，不拆分至高层备货，源头减少补货！
-  // 不校验拣货区库存！
-  // ==========================================
-  if (!determinedType) {
-    const isHotByDays = sku.activeDays30d >= config.hotProductRule.minActiveDays30d;
-    const isHotBySales = sku.salesRankPercent <= config.hotProductRule.topSalesPercent / 100;
-    const isHotProduct = isHotByDays || isHotBySales;
+    // ==========================================
+    // 1. 【新品判定】
+    // ==========================================
+    if (currentStepType === 'NEW') {
+      if (!config.newProductRule.enabled) {
+        trace.push({
+          stepName: `优先级${stepNumber}: 新品判定 (NEW - 已停用)`,
+          condition: '管理员已关闭新品独立直决规则',
+          result: false,
+          description: '新品规则未启用，跳过该项判定，直接进入下一级流水线。',
+          badgeColor: 'slate',
+        });
+        continue;
+      }
 
-    trace.push({
-      stepName: '优先级2: 爆品判定 (HOT)',
-      condition: `近 30 天动销天数 ≥ ${config.hotProductRule.minActiveDays30d}天 (当前: ${sku.activeDays30d}天) 或 出库量 TOP ${config.hotProductRule.topSalesPercent}% (当前分位: 前 ${(sku.salesRankPercent * 100).toFixed(1)}%)`,
-      result: isHotProduct,
-      description: isHotProduct
-        ? `命中爆品条件！(动销天数: ${sku.activeDays30d}天, 30天总出库: ${sku.total30dOutboundQty}件, TOP ${(sku.salesRankPercent * 100).toFixed(1)}%)。直决：一层足量铺货 + 地堆整托囤货，不拆分高层！`
-        : `未达到爆品阈值 (动销天数 ${sku.activeDays30d} < ${config.hotProductRule.minActiveDays30d}天 且 非TOP ${config.hotProductRule.topSalesPercent}%)，进入下一步。`,
-      badgeColor: isHotProduct ? 'amber' : 'slate',
-    });
+      let isNewProduct = false;
+      let conditionText = '';
+      const mode = config.newProductRule.determinationMode || 'NO_HISTORY_INBOUND';
 
-    if (isHotProduct && config.hotProductRule.enabled) {
-      determinedType = 'HOT';
-      isDirectDecision = true;
-      checkedPickStock = false; // 不校验库存
-      priorityStep = 'STEP_2_HOT_PRODUCT';
+      if (mode === 'NO_HISTORY_INBOUND') {
+        isNewProduct = !sku.hasHistoryInbound;
+        conditionText = `系统无历史入库记录 (hasHistoryInbound === false)`;
+      } else if (mode === 'FIRST_INBOUND_WITHIN_DAYS') {
+        const daysLimit = config.newProductRule.newProductDaysLimit || 30;
+        if (!sku.hasHistoryInbound) {
+          isNewProduct = true;
+          conditionText = `无历史记录 (首次到货 ≤ ${daysLimit}天)`;
+        } else if (sku.firstInboundDate) {
+          // 比较首入日期与当前基准日 2026-09-24
+          const firstDate = new Date(sku.firstInboundDate).getTime();
+          const currDate = new Date('2026-09-24').getTime();
+          const diffDays = Math.max(0, Math.floor((currDate - firstDate) / (86400 * 1000)));
+          isNewProduct = diffDays <= daysLimit;
+          conditionText = `首次入库距今 ${diffDays} 天 (阈值 ≤ ${daysLimit} 天)`;
+        } else {
+          isNewProduct = false;
+          conditionText = `在售常规品，超过新品期限 (阈值 ≤ ${daysLimit} 天)`;
+        }
+      } else if (mode === 'TOTAL_INBOUND_COUNT') {
+        const countLimit = config.newProductRule.maxInboundCount || 1;
+        isNewProduct = !sku.hasHistoryInbound;
+        conditionText = `累计入库次数 ≤ ${countLimit} 次`;
+      }
 
-      if (sku.isFullPallet || sku.inboundQty >= 100) {
-        targetType = 'FLOOR_PALLET_ZONE';
-        palletStrategy = 'FLOOR_PALLET_STAGE';
-        strategySummary = '【爆品直决】整托大件上架绿色地堆托盘区，相邻就近囤货，从源头减少补货往返！';
-        pdaAlertMessage = '【PDA上架提示 - 地堆整托】A类高频爆品！推荐上架绿色地堆托盘区整托囤货，严禁拆托混入高层货架！';
+      trace.push({
+        stepName: `优先级${stepNumber}: 新品判定 (NEW)`,
+        condition: conditionText,
+        result: isNewProduct,
+        description: isNewProduct
+          ? `检测到该 SKU [${sku.skuCode}] 符合新品判定条件 (${conditionText})，命中新品规则！直决上架${
+              config.newProductRule.targetLocationType === 'FLOOR_PALLET_ZONE' ? '地堆托盘区' : '一层拣货位'
+            }，${config.newProductRule.skipPickStockCheck ? '免验拣货库存' : '校验库存'}。`
+          : `不满足新品条件 (${conditionText})，非新品，进入下一步。`,
+        badgeColor: isNewProduct ? 'emerald' : 'slate',
+      });
+
+      if (isNewProduct) {
+        determinedType = 'NEW';
+        isDirectDecision = config.newProductRule.skipPickStockCheck ?? true;
+        checkedPickStock = !isDirectDecision;
+        priorityStep = `STEP_${stepNumber}_NEW_PRODUCT`;
+        targetType = config.newProductRule.targetLocationType || 'PICK_LEVEL_1';
+        palletStrategy = targetType === 'FLOOR_PALLET_ZONE' ? 'FLOOR_PALLET_STAGE' : 'DIRECT_PICK';
+        strategySummary = isDirectDecision
+          ? '【新品直决】直上一层拣货区，免验拣货库存，保障快速上架即时可售！'
+          : '【新品上架】推荐上架指定拣选位，快速建立在售库存！';
+        pdaAlertMessage = '【PDA上架提示 - 新品直通】新品首次入库，请直接上架一层拣货位，无需校验拣货区存量！';
+      }
+    }
+
+    // ==========================================
+    // 2. 【爆品判定】
+    // ==========================================
+    else if (currentStepType === 'HOT') {
+      if (!config.hotProductRule.enabled) {
+        trace.push({
+          stepName: `优先级${stepNumber}: 爆品判定 (HOT - 已停用)`,
+          condition: '管理员已关闭爆品独立判定规则',
+          result: false,
+          description: '爆品规则未启用，跳过该项判定，进入下一级。',
+          badgeColor: 'slate',
+        });
+        continue;
+      }
+
+      const isHotByDays = sku.activeDays30d >= config.hotProductRule.minActiveDays30d;
+      const isHotBySales = sku.salesRankPercent <= config.hotProductRule.topSalesPercent / 100;
+      const hasDailySalesFilter = (config.hotProductRule.minDailySales || 0) > 0;
+      const isHotByDaily = hasDailySalesFilter
+        ? salesResult.adjustedAvg >= (config.hotProductRule.minDailySales || 0)
+        : true;
+
+      const isAndLogic = config.hotProductRule.matchLogic === 'AND';
+      const isHotProduct = isAndLogic
+        ? isHotByDays && isHotBySales && isHotByDaily
+        : (isHotByDays || isHotBySales) && isHotByDaily;
+
+      const logicStr = isAndLogic ? '同时满足 (AND)' : '满足任一 (OR)';
+      const dailyFilterStr = hasDailySalesFilter
+        ? `且 30天均销 ≥ ${config.hotProductRule.minDailySales}件 (当前: ${salesResult.adjustedAvg}件)`
+        : '';
+
+      trace.push({
+        stepName: `优先级${stepNumber}: 爆品判定 (HOT)`,
+        condition: `[${logicStr}] 30天动销天数 ≥ ${config.hotProductRule.minActiveDays30d}天 (当前: ${sku.activeDays30d}天) 或 TOP ${config.hotProductRule.topSalesPercent}% (当前分位: 前 ${(sku.salesRankPercent * 100).toFixed(1)}%) ${dailyFilterStr}`,
+        result: isHotProduct,
+        description: isHotProduct
+          ? `命中爆品条件！(动销天数: ${sku.activeDays30d}天, 30天总出库: ${sku.total30dOutboundQty}件, TOP ${(sku.salesRankPercent * 100).toFixed(1)}%)。直决：一层足量铺货 + 地堆整托囤货，不拆分高层！`
+          : `未达到爆品阈值 (不符合 ${logicStr} 爆品规则)，进入下一步。`,
+        badgeColor: isHotProduct ? 'amber' : 'slate',
+      });
+
+      if (isHotProduct) {
+        determinedType = 'HOT';
+        isDirectDecision = config.hotProductRule.skipPickStockCheck ?? true;
+        checkedPickStock = !isDirectDecision;
+        priorityStep = `STEP_${stepNumber}_HOT_PRODUCT`;
+
+        const thresholdQty = config.hotProductRule.palletThresholdQty || 100;
+        const strategy = config.hotProductRule.targetLocationStrategy || 'FLOOR_PALLET_THEN_PICK';
+
+        if (
+          strategy === 'FLOOR_PALLET_ONLY' ||
+          (strategy === 'FLOOR_PALLET_THEN_PICK' && (sku.isFullPallet || sku.inboundQty >= thresholdQty))
+        ) {
+          targetType = 'FLOOR_PALLET_ZONE';
+          palletStrategy = 'FLOOR_PALLET_STAGE';
+          strategySummary = '【爆品直决】整托大件上架绿色地堆托盘区，相邻就近囤货，从源头减少补货往返！';
+          pdaAlertMessage = '【PDA上架提示 - 地堆整托】A类高频爆品！推荐上架绿色地堆托盘区整托囤货，严禁拆托混入高层货架！';
+        } else {
+          targetType = 'PICK_LEVEL_1';
+          palletStrategy = 'DIRECT_PICK';
+          strategySummary = '【爆品直决】足量铺一层拣货位，高频出库零搬运，源头减少高低位补货！';
+          pdaAlertMessage = '【PDA上架提示 - 爆品直铺】A类爆品直铺一层拣货位，请核对拣货位容量！';
+        }
+      }
+    }
+
+    // ==========================================
+    // 3. 【滞销品判定】
+    // ==========================================
+    else if (currentStepType === 'SLOW') {
+      if (!config.slowProductRule.enabled) {
+        trace.push({
+          stepName: `优先级${stepNumber}: 滞销品预检 (SLOW - 已停用)`,
+          condition: '管理员已关闭滞销品独立判定规则',
+          result: false,
+          description: '滞销品规则未启用，跳过该项判定。',
+          badgeColor: 'slate',
+        });
+        continue;
+      }
+
+      const isSlowByDays = sku.activeDays30d < config.slowProductRule.maxActiveDays30d;
+      const isSlowBySales = sku.salesRankPercent >= (1 - config.slowProductRule.bottomSalesPercent / 100);
+      const isSlowByTotal = sku.total30dOutboundQty <= (config.slowProductRule.maxTotalSales30d || 30);
+
+      const isAndLogic = config.slowProductRule.matchLogic === 'AND';
+      const isSlowCandidate = isAndLogic
+        ? isSlowByDays && isSlowBySales && isSlowByTotal
+        : isSlowByDays || isSlowBySales || isSlowByTotal;
+
+      const logicStr = isAndLogic ? '同时满足 (AND)' : '满足任一 (OR)';
+
+      trace.push({
+        stepName: `优先级${stepNumber}: 滞销品预检 (SLOW)`,
+        condition: `[${logicStr}] 30天动销天数 < ${config.slowProductRule.maxActiveDays30d}天 (当前: ${sku.activeDays30d}天) 或 出库量后 ${config.slowProductRule.bottomSalesPercent}% (当前: ${(sku.salesRankPercent * 100).toFixed(1)}%) 或 30天总出库 ≤ ${config.slowProductRule.maxTotalSales30d}件 (当前: ${sku.total30dOutboundQty}件)`,
+        result: isSlowCandidate,
+        description: isSlowCandidate
+          ? `命中长尾滞销品条件！(动销天数仅 ${sku.activeDays30d} 天，出库量 ${sku.total30dOutboundQty} 件)。直决：直接上架高层/滞销区，严禁挤占一层黄金位！`
+          : `未达滞销品阈值，动销正常，排除滞销品。`,
+        badgeColor: isSlowCandidate ? 'purple' : 'slate',
+      });
+
+      if (isSlowCandidate) {
+        determinedType = 'SLOW';
+        isDirectDecision = config.slowProductRule.skipPickStockCheck ?? true;
+        checkedPickStock = !isDirectDecision;
+        priorityStep = `STEP_${stepNumber}_SLOW_PRODUCT`;
+        targetType = config.slowProductRule.targetLocationType || 'SLOW_MOVING_HIGH_BAY';
+        palletStrategy = 'SLOW_HIGH_BAY';
+        strategySummary = '【滞销品直决】直接上架高层/滞销专区，不占用一层黄金拣选位，订单需要时按需补货！';
+        pdaAlertMessage = '【PDA上架提示 - 高层滞销区】长尾低动销商品，请直接上架三层或高位滞销区，严禁上架一层拣选区！';
+      }
+    }
+
+    // ==========================================
+    // 4. 【老品判定与库存校验】
+    // ==========================================
+    else if (currentStepType === 'REGULAR') {
+      determinedType = 'REGULAR';
+      isDirectDecision = false;
+      checkedPickStock = config.regularProductRule.checkPickAreaStock ?? true;
+      priorityStep = `STEP_${stepNumber}_REGULAR_PRODUCT`;
+
+      const isPickShortage = sku.currentPickStock < pickStockThreshold;
+
+      trace.push({
+        stepName: `优先级${stepNumber}: 老品库存校验 (REGULAR - 动销与库存比对)`,
+        condition: `一层拣货位可用库存 (${sku.currentPickStock} ${sku.unit}) < 阈值 (${pickStockThreshold} = ${baselineLabel} ${baselineDailySales} × 品类安全系数 ${categoryThresholdCoeff})`,
+        result: isPickShortage,
+        description: isPickShortage
+          ? `一层拣货位库存 (${sku.currentPickStock}) 低于库存阈值 (${pickStockThreshold})，拣货面偏紧，推荐上架【${
+              config.regularProductRule.shortageTargetLocation === 'FLOOR_PALLET_ZONE' ? '地堆托盘区' : '一层拣货位'
+            }】补足拣选！`
+          : `一层拣货位库存 (${sku.currentPickStock}) 充足 (≥ 阈值 ${pickStockThreshold})，推荐上架【${
+              config.regularProductRule.sufficientTargetLocation === 'SAME_RACK_VERTICAL' ? '同架垂直备货位' : '二/三层高位备货位'
+            }】立体存储！`,
+        badgeColor: 'blue',
+      });
+
+      if (isPickShortage) {
+        targetType = config.regularProductRule.shortageTargetLocation || 'PICK_LEVEL_1';
+        palletStrategy = targetType === 'FLOOR_PALLET_ZONE' ? 'FLOOR_PALLET_STAGE' : 'DIRECT_PICK';
+        strategySummary = `【老品上架】一层拣货位库存紧缺 (${sku.currentPickStock} < 阈值 ${pickStockThreshold})，推荐直接上架一层拣货位补足！`;
+        pdaAlertMessage = '【PDA上架提示 - 老品补拣选】该老品拣货区库存低于安全阈值，请优先上架一层拣货位！';
       } else {
-        targetType = 'PICK_LEVEL_1';
-        palletStrategy = 'DIRECT_PICK';
-        strategySummary = '【爆品直决】足量铺一层拣货位，高频出库零搬运，源头减少高低位补货！';
-        pdaAlertMessage = '【PDA上架提示 - 爆品直铺】A类爆品直铺一层拣货位，请核对拣货位容量！';
+        targetType = 'RESERVE_LEVEL_2_3';
+        palletStrategy = 'HIGH_BAY_SPLIT';
+        strategySummary = `【老品上架】一层拣货位存量充裕 (${sku.currentPickStock} ≥ 阈值 ${pickStockThreshold})，推荐上架同架二/三层备货位！`;
+        pdaAlertMessage = '【PDA上架提示 - 高位备货】一层拣货区库存充足，请按同架垂直推荐上架二/三层备货位！';
       }
     }
   }
 
-  // ==========================================
-  // 第三步判定：【滞销品判定】
-  // C 类长尾低动销 SKU，近 30 天动销天数 < 5天，或出库量后 20%
-  // 直决：直接上架高层 / 滞销区，订单需要时再补货
-  // 不校验拣货区库存！
-  // ==========================================
-  let isSlowCandidate = false;
-  if (!determinedType) {
-    const isSlowByDays = sku.activeDays30d < config.slowProductRule.maxActiveDays30d;
-    const isSlowBySales = sku.salesRankPercent >= (1 - config.slowProductRule.bottomSalesPercent / 100);
-    isSlowCandidate = isSlowByDays || isSlowBySales;
-
-    trace.push({
-      stepName: '优先级3: 滞销品预检 (SLOW)',
-      condition: `近 30 天动销天数 < ${config.slowProductRule.maxActiveDays30d}天 (当前: ${sku.activeDays30d}天) 或 出库量后 ${config.slowProductRule.bottomSalesPercent}% (当前分位: ${(sku.salesRankPercent * 100).toFixed(1)}%)`,
-      result: isSlowCandidate,
-      description: isSlowCandidate
-        ? `命中长尾滞销品条件！(动销天数仅 ${sku.activeDays30d} 天，后 ${(sku.salesRankPercent * 100).toFixed(1)}%)。直决：直接上架高层/滞销区，严禁挤占一层黄金位！`
-        : `动销天数 ${sku.activeDays30d} 天正常，排除滞销品。`,
-      badgeColor: isSlowCandidate ? 'purple' : 'slate',
-    });
-
-    if (isSlowCandidate && config.slowProductRule.enabled) {
-      determinedType = 'SLOW';
-      isDirectDecision = true;
-      checkedPickStock = false; // 不校验库存
-      priorityStep = 'STEP_3_SLOW_PRODUCT';
-      targetType = 'SLOW_MOVING_HIGH_BAY';
-      palletStrategy = 'SLOW_HIGH_BAY';
-      strategySummary = '【滞销品直决】直接上架高层/滞销专区，不占用一层黄金拣选位，订单需要时按需补货！';
-      pdaAlertMessage = '【PDA上架提示 - 高层滞销区】长尾低动销商品，请直接上架三层或高位滞销区，严禁上架一层拣选区！';
-    }
-  }
-
-  // ==========================================
-  // 第四步判定：【老品上架逻辑】
-  // 排除新品 / 爆品 / 滞销品后，成为老品
-  // 🚨 仅老品才校验拣货区库存！
-  // 一层拣货位可用库存 < SKU 近 30 天平均销量 × 品类阈值系数 → 推荐一层拣货位；
-  // 否则推荐同架 / 邻架二三层备货位
-  // ==========================================
+  // 兜底：如果流水线全部跳过，则默认老品
   if (!determinedType) {
     determinedType = 'REGULAR';
     isDirectDecision = false;
-    checkedPickStock = true; // 仅老品校验库存！
-    priorityStep = 'STEP_4_REGULAR_PRODUCT';
-
-    const isPickShortage = sku.currentPickStock < pickStockThreshold;
-
-    trace.push({
-      stepName: '优先级4: 老品库存校验 (REGULAR - 仅老品校验)',
-      condition: `一层拣货位可用库存 (${sku.currentPickStock} ${sku.unit}) < 阈值 (${pickStockThreshold} = 30天均销 ${salesResult.adjustedAvg} × 品类系数 ${categoryThresholdCoeff})`,
-      result: isPickShortage,
-      description: isPickShortage
-        ? `一层拣货位库存 (${sku.currentPickStock}) 低于库存阈值 (${pickStockThreshold})，拣货面偏紧，推荐上架【一层拣货位】补足拣选！`
-        : `一层拣货位库存 (${sku.currentPickStock}) 充足 (≥ 阈值 ${pickStockThreshold})，推荐上架【同架/邻架二三层备货位】高位立体存储！`,
-      badgeColor: 'blue',
-    });
-
-    if (isPickShortage) {
-      targetType = 'PICK_LEVEL_1';
-      palletStrategy = 'DIRECT_PICK';
-      strategySummary = `【老品上架】一层拣货位库存紧缺 (${sku.currentPickStock} < 阈值 ${pickStockThreshold})，推荐直接上架一层拣货位补足！`;
-      pdaAlertMessage = '【PDA上架提示 - 老品补拣选】该老品拣货区库存低于30天均销，请优先上架一层拣货位！';
-    } else {
-      targetType = 'RESERVE_LEVEL_2_3';
-      palletStrategy = 'HIGH_BAY_SPLIT';
-      strategySummary = `【老品上架】一层拣货位存量充裕 (${sku.currentPickStock} ≥ 阈值 ${pickStockThreshold})，推荐上架同架二/三层备货位！`;
-      pdaAlertMessage = '【PDA上架提示 - 高位备货】一层拣货区库存充足，请按同架垂直推荐上架二/三层备货位！';
-    }
+    checkedPickStock = true;
+    priorityStep = 'STEP_FALLBACK_REGULAR';
+    targetType = 'RESERVE_LEVEL_2_3';
+    palletStrategy = 'HIGH_BAY_SPLIT';
+    strategySummary = '【常规上架】未命中前置特殊类型，推荐常规立体存储！';
+    pdaAlertMessage = '【PDA上架提示】常规商品上架，请扫描储位条码进行上架确认。';
   }
 
   // 推荐具体储位
@@ -368,7 +491,7 @@ export function evaluatePutawayStrategy(
     isDirectDecision,
     checkedPickStock,
     raw30dAvgDailySales: salesResult.rawAvg,
-    adjusted30dAvgDailySales: salesResult.adjustedAvg,
+    adjusted30dAvgDailySales: baselineDailySales,
     promoExcludedDaysCount: salesResult.excludedCount,
     categoryThresholdCoeff,
     pickStockThreshold,

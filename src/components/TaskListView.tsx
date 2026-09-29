@@ -404,7 +404,7 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                   {/* Actions */}
                   <td className="p-3 text-center">
                     <div className="flex items-center justify-center gap-1">
-                      {activeTask?.status === 'in_progress' ? (
+                      {activeTask?.status === 'in_progress' && (
                         <button
                           onClick={() => onCompleteTask(activeTask.taskId)}
                           className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-medium transition-colors flex items-center gap-1 cursor-pointer"
@@ -413,9 +413,7 @@ export const TaskListView: React.FC<TaskListViewProps> = ({
                           <CheckCircle className="w-3 h-3" />
                           <span>完成上架</span>
                         </button>
-                      ) : activeTask?.status === 'completed' ? (
-                        <span className="text-xs text-slate-400">已处理</span>
-                      ) : null}
+                      )}
 
                       {/* Detail drill-down */}
                       <button

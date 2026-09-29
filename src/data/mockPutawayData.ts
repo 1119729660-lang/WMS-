@@ -2,39 +2,63 @@ import {
   PutawayStrategyConfig,
   PutawaySKUCandidate,
   WarehouseLocation,
+  InboundTypeRule,
+  GlobalRuleParameters,
 } from '../types/putaway';
 
 export const DEFAULT_PUTAWAY_CONFIG: PutawayStrategyConfig = {
-  // 1. 判定优先级：新品 → 爆品 → 老品 → 滞销品
-  prioritySequence: ['NEW', 'HOT', 'REGULAR', 'SLOW'],
+  // 1. 判定优先级流水线：新品 → 爆品 → 滞销品 → 老品
+  prioritySequence: ['NEW', 'HOT', 'SLOW', 'REGULAR'],
 
   // 2. 新品判定规则
   newProductRule: {
     enabled: true,
-    directPutawayToLevel1: true, // 直决上一层拣货区，不校验拣货区当前库存
+    determinationMode: 'NO_HISTORY_INBOUND', // 无历史入库记录
+    newProductDaysLimit: 30,                 // 首次入库在 30 天以内
+    maxInboundCount: 1,                      // 累计入库次数 <= 1 次
+    targetLocationType: 'PICK_LEVEL_1',      // 优先直通一层黄金拣选位
+    skipPickStockCheck: true,                // 免验拣货区库存 (直决)
+    maxInitialPickQuantity: 80,              // 首批铺货建议上限 80 件
+    directPutawayToLevel1: true,
     minInitialStockLimit: 50,
   },
 
   // 3. 爆品判定规则
   hotProductRule: {
     enabled: true,
-    minActiveDays30d: 20,       // 近30天动销天数 >= 20天
-    topSalesPercent: 20,        // 出库量 TOP 20%
-    directPutawayToFloorOrPick: true, // 直决：足量铺一层拣货位，相邻地堆整托囤货，不拆分高层备货
-    enableFloorPalletStaging: true,
+    matchLogic: 'OR',                        // 动销天数 OR 出库量排名 (满足任一即为爆品)
+    minActiveDays30d: 20,                    // 近30天动销天数 >= 20天
+    topSalesPercent: 20,                     // 出库量 TOP 20%
+    minDailySales: 0,                        // 日均销量附加限制 (0为不限)
+    targetLocationStrategy: 'FLOOR_PALLET_THEN_PICK', // 整托大件去地堆，散件铺一层
+    palletThresholdQty: 100,                 // 100件以上整托按地堆区推荐
+    skipPickStockCheck: true,                // 免验拣货区库存
+    enableFloorPalletStaging: true,          // 启用绿色地堆托盘囤货
+    directPutawayToFloorOrPick: true,
   },
 
   // 4. 滞销品判定规则
   slowProductRule: {
     enabled: true,
-    maxActiveDays30d: 5,        // 近30天动销天数 < 5天
-    bottomSalesPercent: 20,     // 出库量后 20%
-    directPutawayToHighBay: true, // 直决：直接上架高层/滞销区，订单需要时再补
+    matchLogic: 'OR',                        // 动销天数 OR 出库量排名 (满足任一即为滞销品)
+    maxActiveDays30d: 5,                     // 近30天动销天数 < 5天
+    bottomSalesPercent: 20,                  // 出库量后 20%
+    maxTotalSales30d: 30,                    // 近30天总出库量 <= 30 件
+    targetLocationType: 'SLOW_MOVING_HIGH_BAY', // 直接上架高层/滞销区
+    skipPickStockCheck: true,                // 免验拣货库存
+    forbidLevel1Pick: true,                  // 严禁占用一层黄金拣选位
+    directPutawayToHighBay: true,
   },
 
-  // 5. 老品上架逻辑 (仅老品才校验拣货区库存)
+  // 5. 老品上架逻辑 (仅老品校验拣货区库存)
   regularProductRule: {
-    checkPickAreaStock: true,   // 一层可用库存 < 30天均销*系数 -> 推荐一层，否则推荐同架/邻架二三层
+    enabled: true,
+    baselineSalesPeriod: '30D_AVG',          // 近30天日均销量为基准
+    defaultSafetyStockCoeff: 1.0,            // 默认品类安全库存系数 1.0x
+    checkPickAreaStock: true,                // 严格校验一层拣货区库存
+    shortageTargetLocation: 'PICK_LEVEL_1',  // 缺货时推荐一层拣货位
+    sufficientTargetLocation: 'RESERVE_LEVEL_2_3', // 充足时推荐同架二三层备货位
+    enforceMaxCapacity: true,                // 受限一层最大货位容量
   },
 
   // 6. 30天均销与异常大促日剔除
@@ -452,6 +476,11 @@ export const MOCK_PUTAWAY_SKUS: PutawaySKUCandidate[] = [
     currentPickStock: 0,
     boundRackCode: 'A-01-01',
     daily30dHistory: generate30dHistory(0, 0),
+    price: 399,
+    weightKg: 0.85,
+    volumeM3: 0.003,
+    lengthCm: 18,
+    deadStockDays: 0,
   },
 
   // 2. 【爆品 / A类】动销天数 28 天 >= 20天，出库 TOP 2% -> 直决：足量铺一层拣货位，相邻地堆整托囤货，不拆分高层备货
@@ -478,6 +507,11 @@ export const MOCK_PUTAWAY_SKUS: PutawaySKUCandidate[] = [
       '2026-09-09': { qty: 480, note: '99大促爆单 (4.8倍)' },
       '2026-09-22': { qty: 620, note: '超品日整箱秒杀 (6.2倍)' },
     }),
+    price: 68,
+    weightKg: 8.5,
+    volumeM3: 0.025,
+    lengthCm: 36,
+    deadStockDays: 0,
   },
 
   // 3. 【爆品 / A类】动销天数 25 天 >= 20天，出库 TOP 5%
@@ -504,6 +538,11 @@ export const MOCK_PUTAWAY_SKUS: PutawaySKUCandidate[] = [
       '2026-09-09': { qty: 210, note: '99大促满减 (5.2倍)' },
       '2026-09-22': { qty: 280, note: '超品日限时秒杀 (7.0倍)' },
     }),
+    price: 1590,
+    weightKg: 0.6,
+    volumeM3: 0.002,
+    lengthCm: 22,
+    deadStockDays: 0,
   },
 
   // 4. 【老品 - 拣货区缺货】动销天数 16 天，非新品/爆品/滞销品。一层库存 12 < 30天均销 36 * 1.1 = 39.6 -> 推荐一层拣货位
@@ -529,6 +568,11 @@ export const MOCK_PUTAWAY_SKUS: PutawaySKUCandidate[] = [
     daily30dHistory: generate30dHistory(36, 16, {
       '2026-09-09': { qty: 150, note: '99大促囤货日' },
     }),
+    price: 59.9,
+    weightKg: 3.2,
+    volumeM3: 0.008,
+    lengthCm: 28,
+    deadStockDays: 0,
   },
 
   // 5. 【老品 - 拣货区库存充足】动销天数 14 天。一层库存 85 > 30天均销 28 * 0.9 = 25.2 -> 推荐同架二层备货位 A-01-04-02
@@ -554,6 +598,11 @@ export const MOCK_PUTAWAY_SKUS: PutawaySKUCandidate[] = [
     daily30dHistory: generate30dHistory(28, 14, {
       '2026-09-09': { qty: 110, note: '开学季大促' },
     }),
+    price: 119,
+    weightKg: 0.15,
+    volumeM3: 0.001,
+    lengthCm: 11,
+    deadStockDays: 0,
   },
 
   // 6. 【滞销品 / C类】动销天数 2 天 (<5天)，出库量后 4% -> 直决：直接上架高层/滞销区 A-01-08-03，不占一层黄金位
@@ -577,6 +626,11 @@ export const MOCK_PUTAWAY_SKUS: PutawaySKUCandidate[] = [
     currentPickStock: 2,
     boundRackCode: 'A-01-08',
     daily30dHistory: generate30dHistory(1, 2),
+    price: 198,
+    weightKg: 2.8,
+    volumeM3: 0.016,
+    lengthCm: 32,
+    deadStockDays: 95,
   },
 
   // 7. 【滞销品 / C类】动销天数 3 天 (<5天)，出库量后 10%
@@ -600,5 +654,195 @@ export const MOCK_PUTAWAY_SKUS: PutawaySKUCandidate[] = [
     currentPickStock: 1,
     boundRackCode: 'A-01-08',
     daily30dHistory: generate30dHistory(1, 3),
+    price: 89,
+    weightKg: 0.45,
+    volumeM3: 0.002,
+    lengthCm: 25,
+    deadStockDays: 120,
+  },
+];
+
+// 全局参数配置初始值
+export const INITIAL_GLOBAL_RULE_PARAMETERS: GlobalRuleParameters = {
+  activeDays30dThreshold: 20,
+  dailySalesThreshold: 0,
+  highValuePriceThreshold: 500,
+  highValueSkuWhitelist: ['SKU-HOT-02'],
+  bulkWeightThresholdKg: 15,
+  bulkVolumeThresholdM3: 0.05,
+  bulkLengthThresholdCm: 50,
+  deadStockDaysThreshold: 90,
+  hotSalesTopPercent: 20,
+};
+
+// 预设上架类型规则初始列表
+export const INITIAL_INBOUND_TYPE_RULES: InboundTypeRule[] = [
+  {
+    id: 'RULE-2026-001',
+    name: '首次入库新品直入拣货层',
+    priority: 1,
+    conditionMode: 'AND',
+    conditions: ['IS_FIRST_INBOUND'],
+    recommendedZone: '拣货层',
+    recommendedStrategy: '同位优先',
+    status: 'ENABLED',
+    notes: '新品首次到货优先直入拣选层，保证快速可售。',
+    executionPolicy: {
+      recommendedTargetDirection: '推荐上架【一层拣货位】',
+      skipPickStockCheck: true,
+      initialMaxStockLimit: 80,
+      routingStrategy: '标准件优先入一层拣货区',
+      directNoSplitReserve: true,
+      storageDirection: '高位货架1层黄金拣选位',
+      prohibitPickLayer1: false,
+      forceDirectHighBay: false,
+      shortageRecommendation: '推荐上架【一层黄金拣货位】补足拣货',
+      sufficientRecommendation: '推荐上架【同架 / 邻架二三层备货位】',
+      safetyStockCoeff: 1.0,
+      capacityOverflowProtection: true,
+    },
+    createdAt: '2026-09-20 10:00:00',
+    updatedAt: '2026-09-24 14:30:00',
+  },
+  {
+    id: 'RULE-2026-002',
+    name: 'A类高频爆品整托入地堆区',
+    priority: 2,
+    conditionMode: 'AND',
+    conditions: [
+      'IS_ACTIVE_DAYS_GT_20',
+      'IS_HOT_TOP_N_PERCENT',
+      'IS_BULK_OR_OVERWEIGHT',
+    ],
+    recommendedZone: '地堆区',
+    recommendedStrategy: '指定货架范围',
+    specifiedRacks: ['FP-A-01', 'FP-A-02', 'FP-B-01'],
+    status: 'ENABLED',
+    notes: '高频大件整托囤货，减少后续高低位频繁补货往返。',
+    executionPolicy: {
+      recommendedTargetDirection: '推荐上架【绿色地堆托盘区】',
+      skipPickStockCheck: true,
+      initialMaxStockLimit: 200,
+      routingStrategy: '大件 / 整托去地堆托盘区',
+      directNoSplitReserve: true,
+      storageDirection: '地堆整托直出区',
+      prohibitPickLayer1: false,
+      forceDirectHighBay: false,
+      shortageRecommendation: '推荐上架【地堆优先托盘位】',
+      sufficientRecommendation: '推荐上架【地堆备用缓冲托位】',
+      safetyStockCoeff: 1.2,
+      capacityOverflowProtection: true,
+    },
+    createdAt: '2026-09-20 10:15:00',
+    updatedAt: '2026-09-25 09:20:00',
+  },
+  {
+    id: 'RULE-2026-003',
+    name: '高价值精品防盗专区存储',
+    priority: 3,
+    conditionMode: 'OR',
+    conditions: ['IS_HIGH_VALUE'],
+    recommendedZone: '高价值专区',
+    recommendedStrategy: '指定货架范围',
+    specifiedRacks: ['A-01-01', 'A-01-02'],
+    status: 'ENABLED',
+    notes: '单价高昂美妆个护或数码专柜商品，需双人验货后入防盗柜。',
+    executionPolicy: {
+      recommendedTargetDirection: '推荐上架【高价值专柜防盗区】',
+      skipPickStockCheck: true,
+      initialMaxStockLimit: 50,
+      routingStrategy: '贵重品专柜独立管控',
+      directNoSplitReserve: true,
+      storageDirection: '高价值专区（防盗密码柜）',
+      prohibitPickLayer1: false,
+      forceDirectHighBay: false,
+      shortageRecommendation: '推荐上架【专柜主陈列位】',
+      sufficientRecommendation: '推荐上架【专区内备用安全柜】',
+      safetyStockCoeff: 1.0,
+      capacityOverflowProtection: true,
+    },
+    createdAt: '2026-09-21 11:30:00',
+    updatedAt: '2026-09-26 16:40:00',
+  },
+  {
+    id: 'RULE-2026-004',
+    name: '90天长尾滞销品高层归集',
+    priority: 4,
+    conditionMode: 'OR',
+    conditions: ['IS_DEAD_STOCK_90D'],
+    recommendedZone: '滞销存放区',
+    recommendedStrategy: '就近空位',
+    status: 'ENABLED',
+    notes: '长期无动销清仓长尾品，禁止占用一层黄金拣选位。',
+    executionPolicy: {
+      recommendedTargetDirection: '推荐上架【高层三层 / 滞销专区】',
+      skipPickStockCheck: false,
+      initialMaxStockLimit: 40,
+      routingStrategy: '长尾低频滞销强制高层化',
+      directNoSplitReserve: false,
+      storageDirection: '高层三层 / 滞销专区（长尾订单需补）',
+      prohibitPickLayer1: true,
+      forceDirectHighBay: true,
+      shortageRecommendation: '不予补货至一层，直上高层',
+      sufficientRecommendation: '推荐上架【高层三层 / 滞销专区】',
+      safetyStockCoeff: 0.5,
+      capacityOverflowProtection: true,
+    },
+    createdAt: '2026-09-21 14:00:00',
+    updatedAt: '2026-09-27 10:15:00',
+  },
+  {
+    id: 'RULE-2026-005',
+    name: '常规在售品拣选紧缺直补',
+    priority: 5,
+    conditionMode: 'OR',
+    conditions: ['IS_BELOW_SAFETY_AND_SALES_GTE_THRESHOLD'],
+    recommendedZone: '拣货层',
+    recommendedStrategy: '同位优先',
+    status: 'ENABLED',
+    notes: '一层拣选区不足时，入库即时补充一层拣货位。',
+    executionPolicy: {
+      recommendedTargetDirection: '推荐上架【一层拣货位】',
+      skipPickStockCheck: false,
+      initialMaxStockLimit: 120,
+      routingStrategy: '先补拣货层，余量入备货层',
+      directNoSplitReserve: false,
+      storageDirection: '高位货架同架/邻架二三层备货位',
+      prohibitPickLayer1: false,
+      forceDirectHighBay: false,
+      shortageRecommendation: '推荐上架【一层黄金拣货位】补足拣货',
+      sufficientRecommendation: '推荐上架【同架 / 邻架二三层备货位】',
+      safetyStockCoeff: 1.0,
+      capacityOverflowProtection: true,
+    },
+    createdAt: '2026-09-22 09:40:00',
+    updatedAt: '2026-09-27 15:00:00',
+  },
+  {
+    id: 'RULE-2026-006',
+    name: '大件超重品直入地堆',
+    priority: 6,
+    conditionMode: 'AND',
+    conditions: ['IS_BULK_OR_OVERWEIGHT'],
+    recommendedZone: '地堆区',
+    recommendedStrategy: '就近空位',
+    status: 'DISABLED',
+    notes: '大件超重品临时直放地堆规则（当前测试停用）。',
+    executionPolicy: {
+      recommendedTargetDirection: '推荐上架【绿色地堆托盘区】',
+      skipPickStockCheck: true,
+      initialMaxStockLimit: 60,
+      routingStrategy: '大件 / 整托去地堆托盘区',
+      directNoSplitReserve: true,
+      storageDirection: '地堆托盘区',
+      prohibitPickLayer1: false,
+      forceDirectHighBay: false,
+      shortageRecommendation: '推荐上架【地堆优先托盘位】',
+      sufficientRecommendation: '推荐上架【地堆托盘区】',
+      safetyStockCoeff: 1.0,
+      capacityOverflowProtection: true,
+    },
+    createdAt: '2026-09-22 15:20:00',
+    updatedAt: '2026-09-28 08:30:00',
   },
 ];

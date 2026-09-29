@@ -25,37 +25,58 @@ export interface CategoryStockConfig {
 }
 
 export interface PutawayStrategyConfig {
-  // 1. 判定优先级 (严格固定: 新品 → 爆品 → 老品 → 滞销品)
+  // 1. 判定优先级 (支持自定义顺序: 新品、爆品、滞销品、老品)
   prioritySequence: ('NEW' | 'HOT' | 'REGULAR' | 'SLOW')[];
 
-  // 2. 新品判定规则 (系统无历史入库记录)
+  // 2. 新品判定规则
   newProductRule: {
     enabled: boolean;
-    directPutawayToLevel1: boolean; // 直决上架一层拣货位，不校验拣货区库存
-    minInitialStockLimit: number;   // 首次入库建议铺货量
+    determinationMode: 'NO_HISTORY_INBOUND' | 'FIRST_INBOUND_WITHIN_DAYS' | 'TOTAL_INBOUND_COUNT';
+    newProductDaysLimit: number;       // 首次入库在 N 天以内算新品，默认 30 天
+    maxInboundCount: number;           // 累计入库次数 <= N 次算新品，默认 1 次
+    targetLocationType: 'PICK_LEVEL_1' | 'FLOOR_PALLET_ZONE' | 'RESERVE_LEVEL_2_3'; // 推荐上架目标
+    skipPickStockCheck: boolean;       // 免验拣货区库存 (直决机制)
+    maxInitialPickQuantity: number;    // 首批铺货建议上限
+    directPutawayToLevel1?: boolean;   // 兼容旧字段
+    minInitialStockLimit?: number;     // 兼容旧字段
   };
 
-  // 3. 爆品判定规则 (动销天数>=20天 或 出库量 TOP 20%)
+  // 3. 爆品判定规则
   hotProductRule: {
     enabled: boolean;
-    minActiveDays30d: number;      // 默认 20 天
-    topSalesPercent: number;       // 默认 20% (TOP 20%)
-    directPutawayToFloorOrPick: boolean; // 直决上架：足量铺一层，相邻地堆整托囤货，不拆分高层备货
-    enableFloorPalletStaging: boolean;   // 启用绿色地堆托盘囤货
+    matchLogic: 'OR' | 'AND';          // 动销天数与出库排名逻辑：满足任一 OR vs 同时满足 AND
+    minActiveDays30d: number;          // 近30天动销天数 >= N 天，默认 20 天
+    topSalesPercent: number;           // 出库量 TOP N%，默认 20%
+    minDailySales: number;             // 近30天日均销量阈值 (>= N件，0为不限制)
+    targetLocationStrategy: 'FLOOR_PALLET_THEN_PICK' | 'PICK_LEVEL_1_ONLY' | 'FLOOR_PALLET_ONLY';
+    palletThresholdQty: number;        // 整托/大件地堆判定起算件数，默认 100 件
+    skipPickStockCheck: boolean;       // 免验拣货区库存
+    enableFloorPalletStaging: boolean; // 启用绿色地堆托盘囤货
+    directPutawayToFloorOrPick?: boolean; // 兼容旧字段
   };
 
-  // 4. 滞销品判定规则 (长尾低动销，动销天数<5天 或 出库量后20%)
+  // 4. 滞销品判定规则
   slowProductRule: {
     enabled: boolean;
-    maxActiveDays30d: number;      // 默认 5 天 (<5天)
-    bottomSalesPercent: number;    // 默认 20% (后20%)
-    directPutawayToHighBay: boolean; // 直决上架：直接上架高层/滞销区，不占一层黄金位，订单需要时再补
+    matchLogic: 'OR' | 'AND';          // 动销天数与出库排名逻辑：满足任一 OR vs 同时满足 AND
+    maxActiveDays30d: number;          // 近30天动销天数 < N 天，默认 5 天
+    bottomSalesPercent: number;        // 出库量后 N%，默认 20%
+    maxTotalSales30d: number;          // 近30天总出库量 <= N 件，默认 30 件
+    targetLocationType: 'SLOW_MOVING_HIGH_BAY' | 'RESERVE_LEVEL_2_3'; // 推荐目标储位
+    skipPickStockCheck: boolean;       // 免验拣货库存
+    forbidLevel1Pick: boolean;         // 严格禁止上一层黄金拣选位
+    directPutawayToHighBay?: boolean;  // 兼容旧字段
   };
 
-  // 5. 老品上架规则 (排除新品/爆品/滞销品后，必须校验拣货区库存)
+  // 5. 老品上架规则 (排除前置品类后，根据均销与当前库存计算)
   regularProductRule: {
-    checkPickAreaStock: boolean;   // 恒为 true：仅老品才校验拣货区库存
-    // 条件：一层拣货位可用库存 < 近30天平均销量 × 品类阈值系数 => 推荐一层拣货位，否则推荐同架/邻架二三层
+    enabled: boolean;
+    baselineSalesPeriod: '30D_AVG' | '7D_AVG' | 'WEIGHTED_7_30'; // 均销核算基准
+    defaultSafetyStockCoeff: number;   // 默认品类安全库存系数 (如 1.0x)
+    checkPickAreaStock: boolean;       // 严格校验一层拣货区库存
+    shortageTargetLocation: 'PICK_LEVEL_1' | 'FLOOR_PALLET_ZONE'; // 缺货时推荐储位
+    sufficientTargetLocation: 'RESERVE_LEVEL_2_3' | 'SAME_RACK_VERTICAL'; // 充足时推荐储位
+    enforceMaxCapacity: boolean;       // 是否受限一层最大货位容量
   };
 
   // 6. 30天均销与大促剔除
@@ -138,6 +159,111 @@ export interface PutawaySKUCandidate {
     isPromoSpike?: boolean;
     promoNote?: string;
   }>;
+
+  // 实体物理属性与价值 (用于判定高价值品、大件超重、滞销等)
+  price?: number;             // 单价 (元)
+  weightKg?: number;          // 单件毛重 (kg)
+  volumeM3?: number;          // 单件体积 (m³)
+  lengthCm?: number;          // 最大单边长 (cm)
+  deadStockDays?: number;     // 连续零动销天数
+}
+
+// 9 大可选条件键值定义
+export type InboundRuleConditionKey =
+  | 'IS_FIRST_INBOUND'                          // 是否首次入库
+  | 'IS_PICK_PLUS_BATCH_GTE_30D_SALES'          // 是否拣货区数量 + 当批来货数量≥近 30 天销量
+  | 'IS_ACTIVE_DAYS_GT_20'                      // 是否近 30 天动销天数大于 20
+  | 'IS_PICK_STOCK_GT_30D_SALES'                // 是否拣货区数量大于近 30 天销量
+  | 'IS_BELOW_SAFETY_AND_SALES_GTE_THRESHOLD'   // 是否低于安全库存 & 日均销量≥阈值
+  | 'IS_HIGH_VALUE'                             // 是否高价值品
+  | 'IS_BULK_OR_OVERWEIGHT'                     // 是否大件 / 超重
+  | 'IS_DEAD_STOCK_90D'                         // 是否滞销 90 天零动销
+  | 'IS_HOT_TOP_N_PERCENT';                     // 是否热销 TOP 前 N%
+
+export const CONDITION_LABEL_MAP: Record<InboundRuleConditionKey, string> = {
+  IS_FIRST_INBOUND: '是否首次入库',
+  IS_PICK_PLUS_BATCH_GTE_30D_SALES: '是否拣货区数量 + 当批来货数量≥近 30 天销量',
+  IS_ACTIVE_DAYS_GT_20: '是否近 30 天动销天数大于 20',
+  IS_PICK_STOCK_GT_30D_SALES: '是否拣货区数量大于近 30 天销量',
+  IS_BELOW_SAFETY_AND_SALES_GTE_THRESHOLD: '是否低于安全库存 & 日均销量≥阈值',
+  IS_HIGH_VALUE: '是否高价值品',
+  IS_BULK_OR_OVERWEIGHT: '是否大件 / 超重',
+  IS_DEAD_STOCK_90D: '是否滞销 90 天零动销',
+  IS_HOT_TOP_N_PERCENT: '是否热销 TOP 前 N%',
+};
+
+export type RecommendedZoneOption = '拣货层' | '备货层' | '地堆区' | '高价值专区' | '滞销存放区';
+export type RecommendedStrategyOption = '同位优先' | '就近空位' | '指定货架范围';
+
+// 来货类型规则 - 12项执行机制与推荐策略高级参数
+export interface InboundExecutionPolicy {
+  // 1. 推荐上架去向 (例如: 推荐上架【一层拣货位】)
+  recommendedTargetDirection: string;
+  // 2. 直执机制（免除拣货库存）：是否开启 —— 开启后直接锁定货位，跳过拣货货架校验
+  skipPickStockCheck: boolean;
+  // 3. 首批建议铺货上限：80 件（自定义填写）
+  initialMaxStockLimit: number;
+  // 4. 分流向策略：大件 / 整托去地堆托盘区
+  routingStrategy: string;
+  // 5. 免除拣货库存直决：已开启 —— 不拆分高层备货区，源头减少补货
+  directNoSplitReserve: boolean;
+  // 6. 推荐存储去向：高层三层 / 滞销专区（长尾订单需补）
+  storageDirection: string;
+  // 7. 严禁上架一层拣选区：是否开启 —— 防止低动销占用黄金通道
+  prohibitPickLayer1: boolean;
+  // 8. 直决免除拣货库存：是否开启 —— 即使一层为 0 也直接上高层
+  forceDirectHighBay: boolean;
+  // 9. 一层库存不足时推荐储位：推荐上架【一层黄金拣货位】补足拣货 [推荐]
+  shortageRecommendation: string;
+  // 10. 一层库存充足时推荐储位：推荐上架【同架 / 邻架二三层备货位】[推荐]
+  sufficientRecommendation: string;
+  // 11. 默认品类安全系数：1 × 均销
+  safetyStockCoeff: number;
+  // 12. 货位容量超限保护：是否开启 —— 一层满仓时强制转二三层
+  capacityOverflowProtection: boolean;
+}
+
+export const DEFAULT_INBOUND_EXECUTION_POLICY: InboundExecutionPolicy = {
+  recommendedTargetDirection: '推荐上架【一层拣货位】',
+  skipPickStockCheck: true,
+  initialMaxStockLimit: 80,
+  routingStrategy: '大件 / 整托去地堆托盘区',
+  directNoSplitReserve: true,
+  storageDirection: '高层三层 / 滞销专区（长尾订单需补）',
+  prohibitPickLayer1: false,
+  forceDirectHighBay: false,
+  shortageRecommendation: '推荐上架【一层黄金拣货位】补足拣货',
+  sufficientRecommendation: '推荐上架【同架 / 邻架二三层备货位】',
+  safetyStockCoeff: 1.0,
+  capacityOverflowProtection: true,
+};
+
+export interface InboundTypeRule {
+  id: string;                                   // 规则 ID (系统自动生成只读)
+  name: string;                                 // 类型名称 (1~50字符，同仓库下唯一)
+  priority: number;                             // 优先级 (正整数 >= 1，数字越小优先级越高)
+  conditionMode: 'AND' | 'OR';                  // 条件组合模式: 全部满足 (AND) / 满足任一 (OR)
+  conditions: InboundRuleConditionKey[];        // 已选条件清单
+  recommendedZone: RecommendedZoneOption;       // 推荐货区
+  recommendedStrategy: RecommendedStrategyOption; // 推荐货架策略
+  specifiedRacks?: string[];                    // 指定货架范围编码列表
+  status: 'ENABLED' | 'DISABLED';               // 规则状态: 启用 / 禁用
+  notes?: string;                               // 备注 (最多200字符)
+  executionPolicy?: InboundExecutionPolicy;     // 12项执行与去向策略配置
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface GlobalRuleParameters {
+  activeDays30dThreshold: number;       // 近 30 天动销天数阈值，默认 20
+  dailySalesThreshold: number;          // 日均销量阈值，默认 0
+  highValuePriceThreshold: number;      // 高价值品 - 单价阈值，默认 0
+  highValueSkuWhitelist: string[];      // 高价值品 - SKU 白名单
+  bulkWeightThresholdKg: number;        // 大件 / 超重 - 重量阈值 (kg)，默认 0
+  bulkVolumeThresholdM3: number;        // 大件 / 超重 - 体积阈值 (m³)，默认 0
+  bulkLengthThresholdCm: number;        // 大件 / 超重 - 单边长度阈值 (cm)，默认 0
+  deadStockDaysThreshold: number;       // 滞销统计天数阈值，默认 90
+  hotSalesTopPercent: number;           // 热销 TOP 百分比 N (%)，默认 20
 }
 
 // 判定结果与推导链 (Audit Trace)

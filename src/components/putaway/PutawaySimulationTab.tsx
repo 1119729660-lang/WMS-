@@ -14,6 +14,7 @@ import {
   PackagePlus,
   Compass,
   Check,
+  Sliders,
 } from 'lucide-react';
 import {
   PutawaySKUCandidate,
@@ -29,6 +30,7 @@ interface PutawaySimulationTabProps {
   locations: WarehouseLocation[];
   onSelectSkuForPda: (sku: PutawaySKUCandidate, result: PutawayDecisionResult) => void;
   onShowToast: (msg: string, type?: 'success' | 'info' | 'warning') => void;
+  onOpenConfig?: () => void;
 }
 
 export const PutawaySimulationTab: React.FC<PutawaySimulationTabProps> = ({
@@ -37,6 +39,7 @@ export const PutawaySimulationTab: React.FC<PutawaySimulationTabProps> = ({
   locations,
   onSelectSkuForPda,
   onShowToast,
+  onOpenConfig,
 }) => {
   const [selectedSkuId, setSelectedSkuId] = useState<string>(candidates[0]?.id || '');
   const [filterType, setFilterType] = useState<string>('ALL');
@@ -83,6 +86,17 @@ export const PutawaySimulationTab: React.FC<PutawaySimulationTabProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {onOpenConfig && (
+            <button
+              onClick={onOpenConfig}
+              className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold px-3.5 py-2 rounded-xl transition-colors shadow-xs cursor-pointer"
+              title="配置新品、爆品、老品、滞销品的各项规则与流水线顺序"
+            >
+              <Sliders className="w-3.5 h-3.5 text-blue-600" />
+              <span>配置四类判定规则</span>
+            </button>
+          )}
+
           <button
             onClick={() => {
               if (activePair) {

@@ -2,8 +2,6 @@ import React from 'react';
 import {
   Activity,
   Warehouse,
-  Calendar,
-  RefreshCw,
   Download,
   Clock,
   Settings2,
@@ -18,8 +16,8 @@ interface MonitoringHeaderProps {
   config: MonitoringConfig;
   onChangeConfig: (updater: Partial<MonitoringConfig>) => void;
   countdownSeconds: number;
-  onManualRefresh: () => void;
-  isRefreshing: boolean;
+  onManualRefresh?: () => void;
+  isRefreshing?: boolean;
   onOpenExportModal: () => void;
   onOpenConfigModal: () => void;
 }
@@ -32,8 +30,6 @@ export const MonitoringHeader: React.FC<MonitoringHeaderProps> = ({
   config,
   onChangeConfig,
   countdownSeconds,
-  onManualRefresh,
-  isRefreshing,
   onOpenExportModal,
   onOpenConfigModal,
 }) => {
@@ -51,18 +47,9 @@ export const MonitoringHeader: React.FC<MonitoringHeaderProps> = ({
           <Activity className="w-5 h-5 animate-pulse" />
         </div>
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-              补货监控看板
-            </h1>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-              实时流转中
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            及时率达标监测 · 缺货双口径核算 · 人效工效排名 · 卡住任务催办
-          </p>
+          <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+            补货监控看板
+          </h1>
         </div>
       </div>
 
@@ -160,18 +147,6 @@ export const MonitoringHeader: React.FC<MonitoringHeaderProps> = ({
             </span>
           )}
         </div>
-
-        {/* Manual Refresh Button */}
-        <button
-          onClick={onManualRefresh}
-          disabled={isRefreshing}
-          className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
-          title="手动刷新看板数据"
-        >
-          <RefreshCw
-            className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-blue-600' : ''}`}
-          />
-        </button>
 
         {/* Config button */}
         <button
